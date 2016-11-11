@@ -31,8 +31,7 @@ case class CodegenOptions(
       "org.postgresql.Driver",
     @HelpMessage(
       "top level imports of generated file"
-    ) imports: String = """|import java.util.Date
-                           |import io.getquill.WrappedValue""".stripMargin,
+    ) imports: String = """|import java.util.Date""".stripMargin,
     @HelpMessage(
       "package name for generated classes"
     ) `package`: String = "tables",
@@ -91,7 +90,7 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
         val columns = getColumns(db, name, foreignKeys)
         val mappedColumns = columns.filter(_.isRight).map(_.right.get)
         val unmappedColumns = columns.filter(_.isLeft).map(_.left.get)
-        if (!unmappedColumns.isEmpty)
+        if (unmappedColumns.nonEmpty)
           warn(s"The following columns from table $name need a mapping: $unmappedColumns")
         Some(Table(
           name,
@@ -102,6 +101,7 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
       }
     }.toVector
   }
+
   def getColumns(db: Connection,
                  tableName: String,
                  foreignKeys: Set[ForeignKey]): Seq[Either[String, Column]] = {
@@ -180,7 +180,7 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
     def toSimple = references.getOrElse(SimpleColumn(tableName, columnName))
 
     def toClass: String = {
-      s"case class ${namingStrategy.table(columnName)}(value: $scalaType) extends AnyVal with WrappedValue[$scalaType]"
+      s"case class ${namingStrategy.table(columnName)}(value: $scalaType) extends AnyVal"
     }
   }
 
@@ -203,6 +203,7 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
           s"$typName(${namingStrategy.column(column.columnName)})"
         }
       }.mkString(", ")
+
       val classes =
         columns.withFilter(_.references.isEmpty).map(_.toClass).mkString("\n")
 
@@ -218,6 +219,19 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
           |}""".stripMargin
     }
   }
+
+  case class Schema(tables: Seq[Table]) {
+
+    def toCode: String = {
+
+
+
+      ""
+    }
+
+
+  }
+
 }
 
 object Codegen extends AppOf[CodegenOptions] {

@@ -1,6 +1,5 @@
 package com.geirsson.codegen
 import java.util.Date
-import io.getquill.WrappedValue
 
 object Tables {
   /////////////////////////////////////////////////////
@@ -11,8 +10,8 @@ object Tables {
     def create(id: Int, authorId: Option[Int], isPublished: Option[Boolean]): Article = {
       Article(Id(id), authorId.map(TestUser.Id.apply), isPublished.map(IsPublished.apply))
     }
-    case class Id(value: Int)              extends AnyVal with WrappedValue[Int]
-    case class IsPublished(value: Boolean) extends AnyVal with WrappedValue[Boolean]
+    case class Id(value: Int)              extends AnyVal
+    case class IsPublished(value: Boolean) extends AnyVal
   }
 
   /////////////////////////////////////////////////////
@@ -23,7 +22,7 @@ object Tables {
     def create(id: Int, name: Option[String]): TestUser = {
       TestUser(Id(id), name.map(Name.apply))
     }
-    case class Id(value: Int)      extends AnyVal with WrappedValue[Int]
-    case class Name(value: String) extends AnyVal with WrappedValue[String]
+    case class Id(value: Int)      extends AnyVal
+    case class Name(value: String) extends AnyVal
   }
 }

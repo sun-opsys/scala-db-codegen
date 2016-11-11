@@ -8,10 +8,17 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import java.sql.DriverManager
 
+import com.zaxxer.hikari.{HikariDataSource, HikariConfig}
+
 import caseapp.CaseApp
 import org.scalatest.FunSuite
 
+import io.getquill.{PostgresDialect, SnakeCase, JdbcContext}
+
+
 class CodegenTest extends FunSuite {
+  import Config._
+
 
   def structure(code: String): String = {
     import scala.meta._
@@ -30,39 +37,14 @@ class CodegenTest extends FunSuite {
   }
 
   test("testMain") {
-    val options = CodegenOptions(
-      schema = s"scala_db_codegen",
-      `package` = "com.geirsson.codegen"
-    )
+
     Class.forName(options.jdbcDriver)
     val conn =
       DriverManager
         .getConnection(options.url, options.user, options.password)
     val stmt = conn.createStatement()
 
-    val sql =
-      s"""|drop schema if exists ${options.schema} cascade;
-          |create schema ${options.schema};
-          |SET search_path TO ${options.schema};
-          |
-          |create table test_user(
-          |  id integer not null,
-          |  name varchar(255),
-          |  primary key (id)
-          |);
-          |
-          |create table article(
-          |  id integer not null,
-          |  article_unique_id uuid,
-          |  author_id integer,
-          |  is_published boolean
-          |);
-          |
-          |ALTER TABLE article
-          |  ADD CONSTRAINT author_id_fk
-          |  FOREIGN KEY (author_id)
-          |  REFERENCES test_user (id);
-      """.stripMargin
+
     stmt.executeUpdate(sql)
     conn.close()
     // By reading the file, we assert that the file compiles.
@@ -93,6 +75,12 @@ class CodegenTest extends FunSuite {
     println(obtained)
     assert(structure(expected) == structure(obtained))
     assert(expected.trim === obtained.trim)
+  }
+
+  test("test JdbcContext and Query Api") {
+
+    assert(ArticleSchema.articles().isEmpty)
+
   }
 
 }
