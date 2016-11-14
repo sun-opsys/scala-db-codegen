@@ -2,8 +2,6 @@ package com.geirsson.codegen
 
 import com.geirsson.codegen.Tables.Article
 import io.getquill._
-import io.getquill.context.sql.idiom.SqlIdiom
-
 
 abstract class AbstractArticleSchema(
   val ctx: JdbcContext[PostgresDialect, SnakeCase]
@@ -15,13 +13,14 @@ abstract class AbstractArticleSchema(
     query[Article]
   }
 
+  def disconnect() =
+    ctx.close()
+
   def articles(limit:Int = 20): List[Article] =
     ctx.run(articles.take(lift(limit)))
 
-  def articleById(id: Article.Id): List[Article] =
-    ctx.run(articles.filter(_.id == lift(id)))
-
-
+  def articleById(id: Article.Id): Option[Article] =
+    ctx.run(articles.filter(_.id == lift(id))).headOption
 
 }
 

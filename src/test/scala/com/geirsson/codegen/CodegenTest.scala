@@ -8,6 +8,7 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import java.sql.DriverManager
 
+import com.geirsson.codegen.Tables.Article
 import com.zaxxer.hikari.{HikariDataSource, HikariConfig}
 
 import caseapp.CaseApp
@@ -18,7 +19,6 @@ import io.getquill.{PostgresDialect, SnakeCase, JdbcContext}
 
 class CodegenTest extends FunSuite {
   import Config._
-
 
   def structure(code: String): String = {
     import scala.meta._
@@ -44,9 +44,9 @@ class CodegenTest extends FunSuite {
         .getConnection(options.url, options.user, options.password)
     val stmt = conn.createStatement()
 
-
     stmt.executeUpdate(sql)
     conn.close()
+
     // By reading the file, we assert that the file compiles.
     val tablesPath = {
       val base = Seq(
@@ -65,22 +65,64 @@ class CodegenTest extends FunSuite {
         base
       }
     }.mkString(File.separator)
+
     val expected = new String(
       Files.readAllBytes(Paths.get(tablesPath))
     )
+
     val baos = new ByteArrayOutputStream()
     val ps = new PrintStream(baos)
-    Codegen.run(options, ps)
+
+    Codegen.generateTableCode(options, ps)
+
     val obtained = new String(baos.toByteArray, StandardCharsets.UTF_8)
-    println(obtained)
+
     assert(structure(expected) == structure(obtained))
     assert(expected.trim === obtained.trim)
   }
 
-  test("test JdbcContext and Query Api") {
+  test("Test JdbcContext and Query Api") {
+    val articles = ArticleSchema.articles()
+    val foundArticle = ArticleSchema.articleById(Article.Id(1))
+    ArticleSchema.disconnect()
+    assert(articles.size == 1)
+    assert(foundArticle.nonEmpty)
+  }
 
-    assert(ArticleSchema.articles().isEmpty)
+  test("Test QueryApi code generation") {
 
+    // By reading the file, we assert that the file compiles.
+    val tablesPath = {
+      val base = Seq(
+        "src",
+        "test",
+        "scala",
+        "com",
+        "geirsson",
+        "codegen",
+        "AbstractArticleSchema.scala"
+      )
+      // This project is a subdirectory of a closed source project.
+      if (Paths.get("").toAbsolutePath.getFileName.toString == "launaskil") {
+        "launaskil-codegen" +: base
+      } else {
+        base
+      }
+    }.mkString(File.separator)
+
+    val expected = new String(
+      Files.readAllBytes(Paths.get(tablesPath))
+    )
+
+    val baos = new ByteArrayOutputStream()
+    val ps = new PrintStream(baos)
+
+    Codegen.generateSchemaCode(options, ps)
+
+    val obtained = new String(baos.toByteArray, StandardCharsets.UTF_8)
+
+//    assert(structure(expected) == structure(obtained))
+    assert(expected.trim === obtained.trim)
   }
 
 }

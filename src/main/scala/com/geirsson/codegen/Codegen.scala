@@ -49,6 +49,9 @@ case class CodegenOptions(
 }
 
 case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
+
+
+
   import Codegen._
   val excludedTables = options.excludedTables.toSet
   val columnType2scalaType = options.typeMap.pairs.toMap
@@ -79,6 +82,10 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
 
   def warn(msg: String): Unit = {
     System.err.println(s"[${Console.YELLOW}warn${Console.RESET}] $msg")
+  }
+
+  def getSchema(tables: Seq[Table]) = {
+    Schema(tables)
   }
 
   def getTables(db: Connection, foreignKeys: Set[ForeignKey]): Seq[Table] = {
@@ -149,6 +156,26 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
      """.stripMargin
   }
 
+  def schema2code(
+    schema: Schema,
+    namingStrategy: NamingStrategy,
+    options:CodegenOptions
+  ) = {
+
+    val body = schema.toCode
+
+    s"""|package ${options.`package`}
+        |${options.imports}
+        |
+        |abstract class AbstractSchema(
+        |  val ctx: JdbcContext[PostgresDialect, SnakeCase]
+        |){
+        |  $body
+        |}
+    """.stripMargin
+
+  }
+
   case class ForeignKey(from: SimpleColumn, to: SimpleColumn)
 
   val logger = Logger(this.getClass)
@@ -186,11 +213,15 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
 
   case class Table(name: String, columns: Seq[Column]) {
     def toCode: String = {
+
       val scalaName = namingStrategy.table(name)
+
       val args = columns.map(_.toArg(namingStrategy, scalaName)).mkString(", ")
+
       val applyArgs = columns.map { column =>
         s"${namingStrategy.column(column.columnName)}: ${column.scalaOptionType}"
       }.mkString(", ")
+
       val applyArgNames = columns.map { column =>
         val typName = if (column.references.nonEmpty) {
           column.toType
@@ -220,15 +251,115 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
     }
   }
 
+  def capFirst(s: String) =
+    if (s.isEmpty) ""
+    else
+      s(0).toUpper + s.substring(1, s.length)
+
+  def lowerFirst(s: String) =
+    if (s.isEmpty) ""
+    else
+      s(0).toLower + s.substring(1, s.length)
+
+  case class Query(
+    tableName: String,
+    table: Table
+  ) {
+    def toQueries: String = {
+
+      val baseQuery =
+        s"""|def ${lowerFirst(tableName)}(limit: Int = 20): List[$tableName] =
+            |  ctx.run($tableName.take(lift(limit))
+      """.stripMargin
+
+      val primKeys =
+        table.columns.filter(_.isPrimaryKey)
+
+      val foreignKey =
+        table.columns.filter(_.references.isDefined)
+
+      val columnQueries =
+        table.columns.filter(col =>
+          !col.isPrimaryKey && col.references.isEmpty
+        ).map { col =>
+
+        val funcName =
+          lowerFirst(tableName)
+
+        val valName =
+          namingStrategy.column(col.columnName)
+
+        val primaryQuery = {
+
+          if(primKeys.isEmpty)
+            ""
+          else if(primKeys.size == 1) {
+            s"""|def ${funcName}ByPk(${namingStrategy(primKeys.head.columnName)} : ${col.toType}: Option[$tableName] =
+              | ctx.run($funcName).filter(_.$valName == lift($valName))).headOption
+          """.stripMargin
+          } else {
+
+          }
+
+
+        }
+
+
+        if(col.isPrimaryKey)
+          s"""|def ${funcName}By${capFirst(valName)}($valName : ${col.toType}: Option[$tableName] =
+              | ctx.run($funcName).filter(_.$valName == lift($valName))).headOption
+          """.stripMargin
+
+        else
+          s"""|def ${funcName}By${capFirst(valName)}($valName : ${col.toType}): List[$tableName] =
+              | ctx.run($funcName).filter(_.$valName == lift($valName)))
+
+        """.stripMargin
+
+      }.mkString("\n\n")
+
+      s"""| $baseQuery
+          |
+          | $columnQueries
+      """.stripMargin
+    }
+  }
+
   case class Schema(tables: Seq[Table]) {
 
-    def toCode: String = {
+    def toCode:String = {
 
+      val tableNames = tables.map { table =>
+        namingStrategy.table(table.name)
+      }
 
+      val findables:Map[String, String] =
+        (for {
+          table <- tables
+          columns <- table.columns
+          tableName = namingStrategy.table(table.name)
+        } yield
+           tableName -> Query(tableName, table).toQueries
+        ).toMap[String,String]
 
-      ""
+      val tableContexts = tableNames.map { tN =>
+        s"""|val ${lowerFirst(tN)}= quote {
+            |  query[$tN]
+            |}
+            |
+            |${findables(tN)}
+        """.stripMargin
+      }
+
+      s"""
+      import ctx._
+
+      ${tableContexts.mkString("\n")}
+
+      def disconnect() =
+        ctx.close()
+      """
     }
-
 
   }
 
@@ -254,7 +385,7 @@ object Codegen extends AppOf[CodegenOptions] {
   def cliRun(codegenOptions: CodegenOptions,
              outstream: PrintStream = System.out): Unit = {
     try {
-      run(codegenOptions, outstream)
+      generateTableCode(codegenOptions, outstream)
     } catch {
       case Error(msg) =>
         System.err.println(msg)
@@ -262,36 +393,98 @@ object Codegen extends AppOf[CodegenOptions] {
     }
   }
 
-  def run(codegenOptions: CodegenOptions,
-          outstream: PrintStream = System.out): Unit = {
+  def generateTableCode(
+    codegenOptions: CodegenOptions,
+    outstream: PrintStream = System.out
+  ): Unit = {
+
     codegenOptions.file.foreach { x =>
       outstream.println("Starting...")
     }
 
     val startTime = System.currentTimeMillis()
+
     Class.forName(codegenOptions.jdbcDriver)
+
     val db: Connection =
       DriverManager.getConnection(codegenOptions.url,
                                   codegenOptions.user,
                                   codegenOptions.password)
+
     val codegen = Codegen(codegenOptions, SnakeCaseReverse)
+
     val foreignKeys = codegen.getForeignKeys(db)
+
     val tables = codegen.getTables(db, foreignKeys)
-    val generatedCode =
+
+    val generatedTableCode =
       codegen.tables2code(tables, SnakeCaseReverse, codegenOptions)
+
     val codeStyle = ScalafmtStyle.defaultWithAlign.copy(maxColumn = 120)
-    val code = Scalafmt.format(generatedCode, style = codeStyle) match {
+
+    val tableCode = Scalafmt.format(generatedTableCode, style = codeStyle) match {
       case FormatResult.Success(x) => x
-      case _ => generatedCode
+      case _ => generatedTableCode
     }
+
     codegenOptions.file match {
       case Some(uri) =>
-        Files.write(Paths.get(new File(uri).toURI), code.getBytes)
+        Files.write(Paths.get(new File(uri).toURI), tableCode.getBytes)
         println(
           s"Done! Wrote to $uri (${System.currentTimeMillis() - startTime}ms)")
       case _ =>
-        outstream.println(code)
+        outstream.println(tableCode)
     }
     db.close()
+  }
+
+  def generateSchemaCode(
+    codegenOptions: CodegenOptions,
+    outstream: PrintStream = System.out
+  ):Unit = {
+
+    codegenOptions.file.foreach { x =>
+      outstream.println("Starting...")
+    }
+
+    val startTime = System.currentTimeMillis()
+
+    Class.forName(codegenOptions.jdbcDriver)
+
+    val db: Connection =
+      DriverManager.getConnection(codegenOptions.url,
+        codegenOptions.user,
+        codegenOptions.password)
+
+    val codegen = Codegen(codegenOptions, SnakeCaseReverse)
+
+    val foreignKeys = codegen.getForeignKeys(db)
+
+    val tables = codegen.getTables(db, foreignKeys)
+
+    val schema = codegen.getSchema(tables)
+
+    val generatedTableCode =
+      codegen.schema2code(schema, SnakeCaseReverse, codegenOptions)
+
+    val codeStyle = ScalafmtStyle.defaultWithAlign.copy(maxColumn = 120)
+
+    val tableCode = Scalafmt.format(generatedTableCode, style = codeStyle) match {
+      case FormatResult.Success(x) => x
+      case _ => generatedTableCode
+    }
+
+    codegenOptions.file match {
+      case Some(uri) =>
+        Files.write(Paths.get(new File(uri).toURI), tableCode.getBytes)
+        println(
+          s"Done! Wrote to $uri (${System.currentTimeMillis() - startTime}ms)"
+        )
+      case _ =>
+        outstream.println(tableCode)
+    }
+
+    db.close()
+
   }
 }

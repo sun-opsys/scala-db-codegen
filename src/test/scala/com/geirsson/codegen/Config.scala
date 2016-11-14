@@ -25,13 +25,26 @@ object Config {
           |  id integer not null,
           |  article_unique_id uuid,
           |  author_id integer,
-          |  is_published boolean
+          |  is_published boolean,
+          |  primary key (id)
           |);
           |
           |ALTER TABLE article
           |  ADD CONSTRAINT author_id_fk
           |  FOREIGN KEY (author_id)
           |  REFERENCES test_user (id);
+          |
+          |INSERT INTO test_user VALUES(
+          | 1,
+          | 'Mark Twain'
+          |);
+          |
+          |INSERT INTO article VALUES(
+          |1,
+          |'9d5f622e-aa53-11e6-80f5-76304dec7eb7',
+          |1,
+          |true
+          |);
       """.stripMargin
 
 }
