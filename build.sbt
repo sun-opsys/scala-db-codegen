@@ -43,8 +43,8 @@ lazy val `launaskil-codegen` =
       packMain := Map("scala-db-codegen" -> "com.geirsson.codegen.Codegen"),
       libraryDependencies ++= Seq(
         "com.geirsson" %% "scalafmt-core" % "0.3.0",
-        "io.getquill" %% "quill-core" % "1.0.0",
-        "io.getquill" %% "quill-jdbc" % "1.0.0",
+        "io.getquill" %% "quill-core" % "1.0.1-SNAPSHOT",
+        "io.getquill" %% "quill-jdbc" % "1.0.1-SNAPSHOT",
         "com.zaxxer" % "HikariCP" % "2.4.7",
         "com.h2database" % "h2" % "1.4.192",
         "org.postgresql" % "postgresql" % "9.4-1201-jdbc41",

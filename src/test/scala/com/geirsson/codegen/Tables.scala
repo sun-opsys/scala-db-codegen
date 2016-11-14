@@ -1,17 +1,27 @@
+
 package com.geirsson.codegen
-import java.util.Date
+import java.util.{Date, UUID}
+import io.getquill.Embedded
 
 object Tables {
   /////////////////////////////////////////////////////
   // Article
   /////////////////////////////////////////////////////
-  case class Article(id: Article.Id, authorId: Option[TestUser.Id], isPublished: Option[Article.IsPublished])
+  case class Article(id: Article.Id,
+    articleUniqueId: Option[Article.ArticleUniqueId],
+    authorId: Option[TestUser.Id],
+    isPublished: Option[Article.IsPublished])
   object Article {
-    def create(id: Int, authorId: Option[Int], isPublished: Option[Boolean]): Article = {
-      Article(Id(id), authorId.map(TestUser.Id.apply), isPublished.map(IsPublished.apply))
+    def create(id: Int, articleUniqueId: Option[UUID], authorId: Option[Int], isPublished: Option[Boolean]): Article = {
+      Article(Id(id),
+        articleUniqueId.map(ArticleUniqueId.apply),
+        authorId.map(TestUser.Id.apply),
+        isPublished.map(IsPublished.apply))
     }
-    case class Id(value: Int)              extends AnyVal
-    case class IsPublished(value: Boolean) extends AnyVal
+    case class Id(value: Int)               extends AnyVal
+    case class ArticleUniqueId(value: UUID) extends AnyVal
+
+    case class IsPublished(value: Boolean)  extends AnyVal
   }
 
   /////////////////////////////////////////////////////

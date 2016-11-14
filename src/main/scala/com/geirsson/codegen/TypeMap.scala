@@ -28,7 +28,8 @@ object TypeMap {
     "varchar" -> "String",
     "serial" -> "Int",
     "bigserial" -> "Long",
-    "timestamp" -> "Date"
+    "timestamp" -> "Date",
+    "uuid" -> "UUID"
   )
 }
 

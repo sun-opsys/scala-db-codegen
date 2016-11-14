@@ -1,20 +1,13 @@
 package com.geirsson.codegen
 
-import java.io.File
-import java.io.PrintStream
-import java.nio.file.Files
-import java.nio.file.Paths
-import java.sql.Connection
-import java.sql.DriverManager
-import java.sql.ResultSet
+import java.io.{File, PrintStream}
+import java.nio.file.{Files, Paths}
+import java.sql.{Connection, DriverManager, ResultSet}
 
-import caseapp.AppOf
-import caseapp._
+import caseapp.{AppOf, _}
 import com.typesafe.scalalogging.Logger
 import io.getquill.NamingStrategy
-import org.scalafmt.FormatResult
-import org.scalafmt.Scalafmt
-import org.scalafmt.ScalafmtStyle
+import org.scalafmt.{FormatResult, Scalafmt, ScalafmtStyle}
 
 case class Error(msg: String) extends Exception(msg)
 
@@ -31,7 +24,10 @@ case class CodegenOptions(
       "org.postgresql.Driver",
     @HelpMessage(
       "top level imports of generated file"
-    ) imports: String = """|import java.util.Date""".stripMargin,
+    ) imports: String =
+      """|import java.util.{Date, UUID}
+         |import io.getquill.Embedded
+      """.stripMargin,
     @HelpMessage(
       "package name for generated classes"
     ) `package`: String = "tables",
@@ -49,10 +45,8 @@ case class CodegenOptions(
 }
 
 case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
-
-
-
   import Codegen._
+
   val excludedTables = options.excludedTables.toSet
   val columnType2scalaType = options.typeMap.pairs.toMap
 
@@ -64,8 +58,10 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
   }
 
   def getForeignKeys(db: Connection): Set[ForeignKey] = {
+
     val foreignKeys =
       db.getMetaData.getExportedKeys(null, options.schema, null)
+
     results(foreignKeys).map { row =>
       ForeignKey(
         from = SimpleColumn(
@@ -78,6 +74,7 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
         )
       )
     }.toSet
+
   }
 
   def warn(msg: String): Unit = {
@@ -109,29 +106,74 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
     }.toVector
   }
 
-  def getColumns(db: Connection,
-                 tableName: String,
-                 foreignKeys: Set[ForeignKey]): Seq[Either[String, Column]] = {
-    val primaryKeys = getPrimaryKeys(db, tableName)
+  def getIndexes(
+    db: Connection,
+    tableName: String
+//    foreignKeys: Set[ForeignKey]
+  ): ResultSet = {
+
+    val indexes = db.getMetaData.getIndexInfo(null, options.schema, tableName, false, false)
+    indexes
+  }
+
+  def getColumns(
+    db: Connection,
+    tableName: String,
+    foreignKeys: Set[ForeignKey]
+  ): Seq[Either[String, Column]] = {
+
+    val primaryKeys:
+    Set[String] = getPrimaryKeys(db, tableName)
+
     val cols =
       db.getMetaData.getColumns(null, options.schema, tableName, null)
+
+    val indexes =
+      db.getMetaData.getIndexInfo(null, options.schema, tableName, false, false)
+
+    // TODO: this needs to be converted into a hashmap
+
+    val cci = results(indexes).map { index =>
+       indexes.getString(COLUMN_NAME)
+    }
+
+    println(
+      s"""
+         |indexes are $tableName:
+         |
+         | ${cci.mkString("\n")}
+         |
+       """.stripMargin
+    )
+
     results(cols).map { row =>
+
       val colName = cols.getString(COLUMN_NAME)
       val simpleColumn = SimpleColumn(tableName, colName)
       val ref = foreignKeys.find(_.from == simpleColumn).map(_.to)
+      val isSearchable = cols.getString(INDEX_NAME)
+      val colType = cols.getString(TYPE_NAME)
 
-      val typ = cols.getString(TYPE_NAME)
-      columnType2scalaType.get(typ).map { scalaType =>
+
+
+      println(colType)
+
+      columnType2scalaType.get(colType).map { scalaType =>
         Right(Column(
           tableName,
           colName,
+          colType,
           scalaType,
           cols.getBoolean(NULLABLE),
           primaryKeys contains cols.getString(COLUMN_NAME),
+          //TODO: lookup to check if this is actually indexed
+          ,
           ref
         ))
-      }.getOrElse(Left(typ))
+      }.getOrElse(Left(colType))
+
     }.toVector
+
   }
 
   def getPrimaryKeys(db: Connection, tableName: String): Set[String] = {
@@ -185,12 +227,17 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
       s"${namingStrategy.table(tableName)}.${namingStrategy.table(columnName)}"
   }
 
-  case class Column(tableName: String,
-                    columnName: String,
-                    scalaType: String,
-                    nullable: Boolean,
-                    isPrimaryKey: Boolean,
-                    references: Option[SimpleColumn]) {
+  case class Column(
+    tableName: String,
+    columnName: String,
+    columnType: String,
+    scalaType: String,
+    nullable: Boolean,
+    isPrimaryKey: Boolean,
+    isIndexed: Boolean,
+    references: Option[SimpleColumn]
+  ) {
+
     def scalaOptionType = makeOption(scalaType)
 
     def makeOption(typ: String): String = {
@@ -204,11 +251,17 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
       s"${namingStrategy.column(columnName)}: ${makeOption(this.toType)}"
     }
 
-    def toSimple = references.getOrElse(SimpleColumn(tableName, columnName))
+    def toSimple =
+      references.getOrElse(SimpleColumn(tableName, columnName))
 
-    def toClass: String = {
+    def toClass: String =
       s"case class ${namingStrategy.table(columnName)}(value: $scalaType) extends AnyVal"
-    }
+
+//      scalaType match {
+//        case "UUID" => s"case class ${namingStrategy.table(columnName)}(value: $scalaType) extends Embedded"
+//        case _ => s"case class ${namingStrategy.table(columnName)}(value: $scalaType) extends AnyVal"
+//      }
+
   }
 
   case class Table(name: String, columns: Seq[Column]) {
@@ -294,11 +347,12 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
           if(primKeys.isEmpty)
             ""
           else if(primKeys.size == 1) {
-            s"""|def ${funcName}ByPk(${namingStrategy(primKeys.head.columnName)} : ${col.toType}: Option[$tableName] =
+            s"""|def ${funcName}ByPk(${namingStrategy.table(primKeys.head.columnName)} : ${col.toType}:
+              |Option[$tableName] =
               | ctx.run($funcName).filter(_.$valName == lift($valName))).headOption
           """.stripMargin
           } else {
-
+            "not impl"
           }
 
 
@@ -367,6 +421,7 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
 
 object Codegen extends AppOf[CodegenOptions] {
   val TABLE_NAME = "TABLE_NAME"
+  val INDEX_NAME = "INDEX_NAME"
   val COLUMN_NAME = "COLUMN_NAME"
   val TYPE_NAME = "TYPE_NAME"
   val NULLABLE = "NULLABLE"
@@ -435,7 +490,9 @@ object Codegen extends AppOf[CodegenOptions] {
       case _ =>
         outstream.println(tableCode)
     }
+
     db.close()
+
   }
 
   def generateSchemaCode(

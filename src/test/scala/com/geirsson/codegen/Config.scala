@@ -45,6 +45,8 @@ object Config {
           |1,
           |true
           |);
+          |
+          |CREATE UNIQUE INDEX article_unique_id_idx ON article (article_unique_id)
       """.stripMargin
 
 }

@@ -4,7 +4,7 @@ import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
 import io.getquill.{SnakeCase, PostgresDialect, JdbcContext}
 import Config._
 
-object ArticleSchema extends AbstractArticleSchema(
+object ArticleSchema extends AbstractArticleSchema (
     {
       val config = new HikariConfig()
       config.setDriverClassName(options.jdbcDriver)
