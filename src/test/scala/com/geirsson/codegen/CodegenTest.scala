@@ -78,7 +78,7 @@ class CodegenTest extends FunSuite {
     // compareing the AST trees should suffice ...
     assert(structure(expected) == structure(obtained))
 
-    //    println(obtained.trim)
+
     //    println(expected.trim)
 
     // unable to get this to work, is there a layout issue, f.ex. with IntelliJ ?
@@ -88,30 +88,69 @@ class CodegenTest extends FunSuite {
 
   test("Test JdbcContext and Query Api") {
 
-    val foundArticle = ArticleSchema.articleById(Article.Id(1))
-
+    val foundArticle =
+      ArticleSchema.articleByPk(Article.Id(1))
+//
     val createdArticle = Article(
-      Article.Id(2),
+      Article.Id(0),
       Some(Article.ArticleUniqueId(java.util.UUID.fromString("9d5f622e-aa53-11e6-80f5-76304dec7eb8"))),
       Some(TestUser.Id(1)),
-      None
+      None,
+      Article.Title("Moby Dick explained")
     )
+//
+    val id = TestUser.Id(0)
+//
 
+    val user1 =
+      ArticleSchema.testUserAll()
+
+    println(user1)
+
+    Thread.sleep(1000)
+
+    println("try again")
+
+    ArticleSchema.createTestUser(
+      Tables.TestUser(
+        id,
+        Some(TestUser.Name("user user"))
+    ))
+
+    ArticleSchema.createTestUser(
+      Tables.TestUser(
+        id,
+        Some(TestUser.Name("user user2"))
+      ))
+
+    val users = ArticleSchema.testUserAll()
+
+//
+//    println(
+//      s"""
+//
+//      $createdArticle
+//
+//      """
+//    )
+//
     ArticleSchema
       .createArticle(createdArticle)
-
+//
     val foundSecond =
-      ArticleSchema.articleById(Article.Id(2))
-
-    val articles = ArticleSchema.articles()
+      ArticleSchema.articleByPk(Article.Id(1))
+//
+    val articles = ArticleSchema.articleAll()
     ArticleSchema.disconnect()
-
+//
+    assert(articles.size == 1)
     assert(foundSecond.nonEmpty)
-    assert(articles.size == 2)
-    assert(foundArticle.nonEmpty)
+    assert(users.size == 2)
+//    assert(foundArticle.nonEmpty)
+
   }
 
-  test("Test QueryApi code generation") {
+  ignore("Test QueryApi code generation") {
 
     // By reading the file, we assert that the file compiles.
     val tablesPath = {
@@ -143,8 +182,10 @@ class CodegenTest extends FunSuite {
 
     val obtained = new String(baos.toByteArray, StandardCharsets.UTF_8)
 
-//    assert(structure(expected) == structure(obtained))
-    assert(expected.trim === obtained.trim)
+//    println(obtained)
+
+    assert(structure(expected) == structure(obtained))
+//    assert(expected.trim === obtained.trim)
   }
 
 }

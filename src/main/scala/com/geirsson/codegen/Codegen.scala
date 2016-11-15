@@ -26,7 +26,6 @@ case class CodegenOptions(
       "top level imports of generated file"
     ) imports: String =
       """|import java.util.{Date, UUID}
-         |import io.getquill.Embedded
       """.stripMargin,
     @HelpMessage(
       "package name for generated classes"
@@ -106,16 +105,6 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
     }.toVector
   }
 
-  def getIndexes(
-    db: Connection,
-    tableName: String
-//    foreignKeys: Set[ForeignKey]
-  ): ResultSet = {
-
-    val indexes = db.getMetaData.getIndexInfo(null, options.schema, tableName, false, false)
-    indexes
-  }
-
   def getColumns(
     db: Connection,
     tableName: String,
@@ -135,28 +124,15 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
 
     val cci = results(indexes).map { index =>
        indexes.getString(COLUMN_NAME)
-    }
-
-    println(
-      s"""
-         |indexes are $tableName:
-         |
-         | ${cci.mkString("\n")}
-         |
-       """.stripMargin
-    )
+    }.toList
 
     results(cols).map { row =>
 
       val colName = cols.getString(COLUMN_NAME)
       val simpleColumn = SimpleColumn(tableName, colName)
       val ref = foreignKeys.find(_.from == simpleColumn).map(_.to)
-      val isSearchable = cols.getString(INDEX_NAME)
+      val isSearchable = if(cci.contains(colName)) true else false
       val colType = cols.getString(TYPE_NAME)
-
-
-
-      println(colType)
 
       columnType2scalaType.get(colType).map { scalaType =>
         Right(Column(
@@ -166,8 +142,7 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
           scalaType,
           cols.getBoolean(NULLABLE),
           primaryKeys contains cols.getString(COLUMN_NAME),
-          //TODO: lookup to check if this is actually indexed
-          ,
+          isSearchable,
           ref
         ))
       }.getOrElse(Left(colType))
@@ -208,14 +183,16 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
 
     s"""|package ${options.`package`}
         |${options.imports}
+        |${schema.tables.map(t => s"import ${options.`package`}.Tables.${namingStrategy.table(t.name)}").mkString("\n")}
+        |import io.getquill._
+        |import java.util.UUID
         |
-        |abstract class AbstractSchema(
+        |abstract class AbstractArticleSchema(
         |  val ctx: JdbcContext[PostgresDialect, SnakeCase]
         |){
         |  $body
         |}
     """.stripMargin
-
   }
 
   case class ForeignKey(from: SimpleColumn, to: SimpleColumn)
@@ -238,7 +215,8 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
     references: Option[SimpleColumn]
   ) {
 
-    def scalaOptionType = makeOption(scalaType)
+    def scalaOptionType =
+      makeOption(scalaType)
 
     def makeOption(typ: String): String = {
       if (nullable) s"Option[$typ]"
@@ -320,64 +298,101 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
   ) {
     def toQueries: String = {
 
+      val funcName =
+        lowerFirst(tableName)
+
+      def valName(col: Column) =
+        namingStrategy.column(col.columnName)
+
       val baseQuery =
-        s"""|def ${lowerFirst(tableName)}(limit: Int = 20): List[$tableName] =
-            |  ctx.run($tableName.take(lift(limit))
+        s"""|def ${lowerFirst(tableName)}All(limit: Int = 20): List[$tableName] = ctx.transaction {
+            |  ctx.run($funcName.take(lift(limit)))
+            |}
       """.stripMargin
 
       val primKeys =
-        table.columns.filter(_.isPrimaryKey)
+        table.columns.count(_.isPrimaryKey)
+
+      val primaryKeyQuery =
+        if(primKeys == 0)
+          ""
+        else if (primKeys == 1)
+          table.columns.find(_.isPrimaryKey).map { col =>
+            s"""|def ${funcName}ByPk(${namingStrategy.column(col.columnName)}:${col.toType}):Option[$tableName] =
+                | ctx.run($funcName.filter(_.${valName(col)} == lift(${valName(col)}))).headOption
+            """.stripMargin
+          }.mkString("\n")
+      else
+          ""
+
+      val create =
+        s"""|def create$tableName(${funcName}Instance: $tableName) = ctx.transaction {
+            |   ctx.run($funcName.insert(lift(${funcName}Instance)).returning(_.id.value))
+            |}
+        """.stripMargin
 
       val foreignKey =
         table.columns.filter(_.references.isDefined)
+
+      val searchFields = for {
+        column <- table.columns
+        if column.isIndexed && column.scalaType == "String"
+      } yield
+
+        if(!column.nullable) {
+          s"""
+          |implicit class Like${tableName}${capFirst(valName(column))}(s1: ${column.toType}) {
+          |  def like(s2: String) = quote(infix"$$s1 like $$s2".as[Boolean])
+          |}
+
+          |def ${funcName}Search(${valName(column)} : ${column.toType}): List[$tableName] = ctx.transaction {
+          |  ctx.run($funcName.filter(${valName(column)(0)} => Like${tableName}${capFirst(valName(column))}(${valName(column)(0)}.${valName(column)}) like lift(s"%$$${valName(column)}%")))
+          |}
+          """.stripMargin
+        } else {
+          s"""
+          |implicit class Like${tableName}${capFirst(valName(column))}(s1: Option[${column.toType}]) {
+          |  def like(s2: String) = quote(infix"$$s1 like $$s2".as[Boolean])
+          |}
+
+          |def ${funcName}Search(${valName(column)} : ${column.toType}): List[$tableName] = ctx.transaction {
+          |  ctx.run($funcName.filter(${valName(column)(0)} => Like${tableName}${capFirst(valName(column))}(${valName(column)(0)}.${valName(column)}) like lift(s"%$$${valName(column)}%")))
+          |}
+          """.stripMargin
+        }
 
       val columnQueries =
         table.columns.filter(col =>
           !col.isPrimaryKey && col.references.isEmpty
         ).map { col =>
 
-        val funcName =
-          lowerFirst(tableName)
 
-        val valName =
-          namingStrategy.column(col.columnName)
-
-        val primaryQuery = {
-
-          if(primKeys.isEmpty)
-            ""
-          else if(primKeys.size == 1) {
-            s"""|def ${funcName}ByPk(${namingStrategy.table(primKeys.head.columnName)} : ${col.toType}:
-              |Option[$tableName] =
-              | ctx.run($funcName).filter(_.$valName == lift($valName))).headOption
-          """.stripMargin
-          } else {
-            "not impl"
-          }
-
-
-        }
-
-
-        if(col.isPrimaryKey)
-          s"""|def ${funcName}By${capFirst(valName)}($valName : ${col.toType}: Option[$tableName] =
-              | ctx.run($funcName).filter(_.$valName == lift($valName))).headOption
-          """.stripMargin
-
-        else
-          s"""|def ${funcName}By${capFirst(valName)}($valName : ${col.toType}): List[$tableName] =
-              | ctx.run($funcName).filter(_.$valName == lift($valName)))
-
+          if (!col.nullable)
+            s"""|def ${funcName}By${capFirst(valName(col))}(${valName(col)} : ${col.toType}): List[$tableName] = ctx.transaction {
+              | ctx.run($funcName.filter(_.${valName(col)} == lift(${valName(col)})))
+              |}
         """.stripMargin
+          else
+            s"""|def ${funcName}By${capFirst(valName(col))}(${valName(col)} : Option[${col.toType}]): List[$tableName] = ctx.transaction {
+              | ctx.run($funcName.filter(_.${valName(col)} == lift(${valName(col)})))
+              |}
+            """.stripMargin
 
       }.mkString("\n\n")
 
       s"""| $baseQuery
           |
+          | $create
+          |
+          | $primaryKeyQuery
+          |
           | $columnQueries
+          |
+          | ${searchFields.mkString("\n")}
       """.stripMargin
     }
   }
+
 
   case class Schema(tables: Seq[Table]) {
 
@@ -394,7 +409,7 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
           tableName = namingStrategy.table(table.name)
         } yield
            tableName -> Query(tableName, table).toQueries
-        ).toMap[String,String]
+        ).toMap[String, String]
 
       val tableContexts = tableNames.map { tN =>
         s"""|val ${lowerFirst(tN)}= quote {
@@ -407,6 +422,14 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
 
       s"""
       import ctx._
+
+      implicit val uuidDecoder: Decoder[UUID] =
+        decoder(java.sql.Types.OTHER, (index, row) =>
+          UUID.fromString(row.getObject(index).toString)) // database-specific implementation
+
+      implicit val uuidEncoder: Encoder[UUID] =
+         encoder(java.sql.Types.OTHER, (index, value, row) =>
+           row.setObject(index, value, java.sql.Types.OTHER)) // database-specific implementation
 
       ${tableContexts.mkString("\n")}
 
@@ -437,8 +460,10 @@ object Codegen extends AppOf[CodegenOptions] {
     }
   }
 
-  def cliRun(codegenOptions: CodegenOptions,
-             outstream: PrintStream = System.out): Unit = {
+  def cliRun(
+    codegenOptions: CodegenOptions,
+    outstream: PrintStream = System.out
+  ): Unit = {
     try {
       generateTableCode(codegenOptions, outstream)
     } catch {
