@@ -28,24 +28,9 @@ abstract class AbstractArticleSchema(
     ctx.run(article.take(lift(limit)))
   }
 
-  def createArticle(articleInstance:Article ) = ctx.transaction {
-    ctx.run( quote {
-
-      querySchema[Article](
-        "article",
-        _.id.value -> "id",
-        _.articleUniqueId.get.value -> "article_unique_id",
-        _.authorId.get.value -> "author_id",
-        _.isPublished.get.value -> "is_published",
-        _.title.value -> "title"
-      ).insert(lift(articleInstance)).returning(_.id.value)
-
-    })
+  def createArticle(articleInstance: Article) = ctx.transaction {
+    ctx.run(article.insert(lift(articleInstance)).returning(_.id))
   }
-
-//  def createArticle(articleInstance: Article) = ctx.transaction {
-//    ctx.run(article.insert(lift(articleInstance)).returning(_.id.value))
-//  }
 
   def articleByPk(id: Article.Id): Option[Article] =
     ctx.run(article.filter(_.id == lift(id))).headOption
@@ -79,12 +64,7 @@ abstract class AbstractArticleSchema(
   }
 
   def createTestUser(testUserInstance: TestUser) = ctx.transaction {
-    ctx.run(
-      querySchema[TestUser](
-        "test_user",
-        _.name.get.value -> "name"
-      ).insert(lift(testUserInstance)).returning(_.id)
-    )
+   ctx.run(testUser.insert(lift(testUserInstance)).returning(_.id))
   }
 
   def testUserByPk(id: TestUser.Id): Option[TestUser] =
