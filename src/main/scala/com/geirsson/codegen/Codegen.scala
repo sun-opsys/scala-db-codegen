@@ -37,10 +37,15 @@ case class CodegenOptions(
       "Do not generate classes for these tables."
     ) excludedTables: List[String] = List("schema_version"),
     @HelpMessage(
-      "Write generated code to this filename. Prints to stdout if not set."
-    ) file: Option[String] = None
+      "Write generated queries to this filename. Prints to stdout if not set"
+    ) queryFile: Option[String],
+    @HelpMessage(
+      "Write generated case class rows to this filename. Prints to stdout if not set."
+    ) caseClassRowFile: Option[String] = None
 ) extends App {
+
   Codegen.cliRun(this)
+
 }
 
 case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
@@ -478,7 +483,7 @@ object Codegen extends AppOf[CodegenOptions] {
     outstream: PrintStream = System.out
   ): Unit = {
 
-    codegenOptions.file.foreach { x =>
+    codegenOptions.caseClassRowFile.foreach { x =>
       outstream.println("Starting...")
     }
 
@@ -507,7 +512,7 @@ object Codegen extends AppOf[CodegenOptions] {
       case _ => generatedTableCode
     }
 
-    codegenOptions.file match {
+    codegenOptions.caseClassRowFile match {
       case Some(uri) =>
         Files.write(Paths.get(new File(uri).toURI), tableCode.getBytes)
         println(
@@ -525,7 +530,7 @@ object Codegen extends AppOf[CodegenOptions] {
     outstream: PrintStream = System.out
   ):Unit = {
 
-    codegenOptions.file.foreach { x =>
+    codegenOptions.queryFile.foreach { x =>
       outstream.println("Starting...")
     }
 
@@ -556,7 +561,7 @@ object Codegen extends AppOf[CodegenOptions] {
       case _ => generatedTableCode
     }
 
-    codegenOptions.file match {
+    codegenOptions.queryFile match {
       case Some(uri) =>
         Files.write(Paths.get(new File(uri).toURI), tableCode.getBytes)
         println(

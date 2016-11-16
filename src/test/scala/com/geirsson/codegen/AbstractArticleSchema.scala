@@ -11,9 +11,6 @@ abstract class AbstractArticleSchema(
 ) {
   import ctx._
 
-//  implicit val encodeArticleUniqueId = MappedEncoding[Article.ArticleUniqueId, UUID](_.value)
-//  implicit val decodeArticleUniqueId = MappedEncoding[UUID, Article.ArticleUniqueId ](uuid => Article.ArticleUniqueId(uuid))
-
   implicit val uuidDecoder: Decoder[UUID] =
     decoder(java.sql.Types.OTHER, (index, row) => UUID.fromString(row.getObject(index).toString)) // database-specific implementation
 

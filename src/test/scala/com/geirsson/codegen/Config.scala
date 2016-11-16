@@ -41,7 +41,6 @@ object Config {
           |  FOREIGN KEY (author_id)
           |  REFERENCES test_user (id);
           |
-          |
           |CREATE UNIQUE INDEX test_user_name_idx ON test_user (name);
           |CREATE UNIQUE INDEX article_title_idx ON article (title);
       """.stripMargin
