@@ -1,3 +1,5 @@
+import java.nio.file._
+
 lazy val publishSettings = Seq(
   publishMavenStyle := true,
   publishMavenStyle := true,
@@ -31,8 +33,12 @@ lazy val publishSettings = Seq(
       </developers>
 )
 
+val deployToBin = taskKey[Unit]("deploy-bin")
+val deployBinPath = settingKey[String]("deploy binary path")
+
 lazy val `launaskil-codegen` =
   (project in file("."))
+//    .enablePlugins(assembly)
     .settings(packSettings)
     .settings(publishSettings)
     .settings(
@@ -41,6 +47,33 @@ lazy val `launaskil-codegen` =
       scalaVersion := "2.11.8",
       version := com.geirsson.codegen.Versions.nightly,
       packMain := Map("scala-db-codegen" -> "com.geirsson.codegen.Codegen"),
+      mainClass in assembly := Some("com.geirsson.codegen.Codegen"),
+      assemblyJarName in assembly := "db-codegen.jar",
+      deployBinPath := "/Users/apollo/DevOps/bin/",
+      deployToBin := {
+        assembly.value
+        Files.copy(
+          Paths.get("/Users/apollo/IdeaProjects/Projects/Work/so/scala-db-codegen/target/scala-2.11/db-codegen.jar"),
+          Paths.get(deployBinPath.value + "db-codegen.jar"),
+          StandardCopyOption.REPLACE_EXISTING
+        )
+      },
+//      assemblyOutputPath := new java.io.File("/Users/apollo/DevOps/bin/" + (assemblyJarName in assembly).value),
+
+      /*
+      deployToBin := {
+        assembly.value
+
+        println("assembly output path is")
+        println(assemblyOutputPath.value)
+        println("assembly output path is")
+
+        assemblyOutputPath.map { file =>
+          println("copying files : " + file.toPath + " " + file.name)
+          Files.copy(file.toPath, new File(deployBinPath.value, file.name).toPath)  
+        }
+        */
+      
       Keys.fork in Test := false,
       Keys.parallelExecution in Test := false,
       libraryDependencies ++= Seq(

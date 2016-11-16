@@ -7,7 +7,7 @@ object Config {
 
   val options = CodegenOptions(
     schema = s"scala_db_codegen",
-    `package` = "com.geirsson.codegen"
+    packageTables = "com.geirsson.codegen"
   )
 
   val sql =
