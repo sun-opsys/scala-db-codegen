@@ -49,11 +49,12 @@ lazy val `launaskil-codegen` =
       packMain := Map("scala-db-codegen" -> "com.geirsson.codegen.Codegen"),
       mainClass in assembly := Some("com.geirsson.codegen.Codegen"),
       assemblyJarName in assembly := "db-codegen.jar",
-      deployBinPath := "/Users/apollo/DevOps/bin/",
+      deployBinPath := sbt.Path.userHome.absolutePath + "/DevOps/bin/",
       deployToBin := {
         assembly.value
         Files.copy(
-          Paths.get("/Users/apollo/IdeaProjects/Projects/Work/so/scala-db-codegen/target/scala-2.11/db-codegen.jar"),
+          Paths.get(target.value + "/scala-2.11/" + (assemblyJarName in assembly).value),
+//          Paths.get("/Users/apollo/IdeaProjects/Projects/Work/so/scala-db-codegen/target/scala-2.11/db-codegen.jar"),
           Paths.get(deployBinPath.value + "db-codegen.jar"),
           StandardCopyOption.REPLACE_EXISTING
         )

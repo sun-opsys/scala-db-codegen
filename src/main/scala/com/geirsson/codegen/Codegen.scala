@@ -20,8 +20,8 @@ case class CodegenOptions(
       "postgres",
     @HelpMessage("jdbc url") url: String = "jdbc:postgresql:postgres",
     @HelpMessage("schema on database") schema: String = "public",
-    @HelpMessage("only tested with postgresql") jdbcDriver: String =
-      "org.postgresql.Driver",
+    @HelpMessage("only tested with postgresql")
+    jdbcDriver: String = "org.postgresql.Driver",
     @HelpMessage(
       "top level imports of generated file"
     ) imports: String =
@@ -199,7 +199,7 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
         |import io.getquill._
         |import java.util.UUID
         |
-        |abstract class AbstractArticleSchema(
+        |abstract class AbstractSchema(
         |  val ctx: JdbcContext[PostgresDialect, SnakeCase]
         |){
         |  $body
@@ -329,11 +329,16 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
         else {
 
           val paramTemplate = pks.map(col => s"""${namingStrategy.column(col.columnName)}:${col.toType}""").mkString(", ")
-          val filterTemplate = pks.map(col => s"""_.${valName(col)} == lift(${valName(col)})""").mkString(" && ")
+          val filterTemplate =
+            pks.map(col =>
+              s"""${funcName(0)}.${valName(col)} == lift(${valName(col)})"""
+            ).mkString(" &&")
 
           table.columns.find(_.isPrimaryKey).map { col =>
             s"""|def ${funcName}ByPk($paramTemplate):Option[$tableName] =
-                |  ctx.run($funcName.filter($filterTemplate)).headOption
+                |  ctx.run($funcName.filter { ${funcName(0)} =>
+                |     $filterTemplate
+                |    }).headOption
             """.stripMargin
           }.mkString("\n")
 
@@ -345,18 +350,48 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
 
         if(pks.nonEmpty) {
 
-          val pksTemplate = pks.map((p:Column) => s"""_.${namingStrategy.column(p.columnName)}""").mkString(", ")
+          val pksTemplate = pks.map((p:Column) =>
+              s"""${funcName(0)}.${namingStrategy.column(p.columnName)}""")
+            .mkString(", ")
 
           s"""|def create$tableName(${funcName}Instance: $tableName) =
-              |  ctx.run($funcName.insert(lift(${funcName}Instance)).returning($pksTemplate))
+              |  ctx.run($funcName.insert(lift(${funcName}Instance))
+              |     .returning { ${funcName(0)} =>
+              |         $pksTemplate
+              |      })
             """.stripMargin
 
         } else
           s"""|def create$tableName(${funcName}Instance: $tableName) =
-              |  ctx.run($funcName.insert(lift(${funcName}Instance))
+              |  ctx.run($funcName.insert(lift(${funcName}Instance)))
            """.stripMargin
       }
 
+      val deleteByPk = {
+
+        val pks: Seq[Column] = table.columns.filter(key => key.isPrimaryKey)
+
+        if(pks.isEmpty)
+          ""
+        else {
+          val paramTemplate = pks.map(col => s"""${namingStrategy.column(col.columnName)}:${col.toType}""").mkString(", ")
+          val filterTemplate =
+            pks.map(col =>
+              s"""${funcName(0)}.${valName(col)} == lift(${valName(col)})"""
+            ).mkString(" &&")
+
+          table.columns.find(_.isPrimaryKey).map { col =>
+            s"""|def delete${tableName}ByPk($paramTemplate): Long =
+                |  ctx.run($funcName.filter { ${funcName(0)} =>
+                |     $filterTemplate
+                |    }.delete)
+            """.stripMargin
+          }.mkString("\n")
+        }
+      }
+
+      // These should probably be handled specially, because they
+      // involve joins, leftjoins etc.
       val foreignKey =
         table.columns.filter(_.references.isDefined)
 
@@ -404,6 +439,8 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
       s"""| $baseQuery
           |
           | $create
+          |
+          | $deleteByPk
           |
           | $primaryKeyQuery
           |
