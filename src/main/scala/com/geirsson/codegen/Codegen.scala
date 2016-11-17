@@ -9,6 +9,13 @@ import com.typesafe.scalalogging.Logger
 import io.getquill.NamingStrategy
 import org.scalafmt.{FormatResult, Scalafmt, ScalafmtStyle}
 
+object Config {
+//  val dateImport = "org.joda.time.DateTime"
+//  val dateMapping = "DateTime"
+  lazy val dateImport = "java.util.Date"
+  lazy val dateMapping = "Date"
+}
+
 case class Error(msg: String) extends Exception(msg)
 
 @AppName("db-codegen")
@@ -25,7 +32,8 @@ case class CodegenOptions(
     @HelpMessage(
       "top level imports of generated file"
     ) imports: String =
-      """|import java.util.{Date, UUID}
+      s"""|import java.util.UUID
+          |import java.util.Date
       """.stripMargin,
     @HelpMessage(
       "package name for generated row case classes"
@@ -406,7 +414,7 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
           |  def like(s2: String) = quote(infix"$$s1 like $$s2".as[Boolean])
           |}
 
-          |def ${funcName}Search(${valName(column)} : ${column.toType}): List[$tableName] = 
+          |def ${funcName}Search${capFirst(valName(column))}(${valName(column)} : ${column.toType}): List[$tableName] =
           |  ctx.run($funcName.filter(${valName(column)(0)} => Like${tableName}${capFirst(valName(column))}(${valName(column)(0)}.${valName(column)}) like lift(s"%$$${valName(column)}%")))
           """.stripMargin
         } else {
@@ -415,7 +423,7 @@ case class Codegen(options: CodegenOptions, namingStrategy: NamingStrategy) {
           |  def like(s2: String) = quote(infix"$$s1 like $$s2".as[Boolean])
           |}
 
-          |def ${funcName}Search(${valName(column)} : ${column.toType}): List[$tableName] = 
+          |def ${funcName}Search${capFirst(valName(column))}(${valName(column)} : ${column.toType}): List[$tableName] =
           |  ctx.run($funcName.filter(${valName(column)(0)} => Like${tableName}${capFirst(valName(column))}(${valName(column)(0)}.${valName(column)}) like lift(s"%$$${valName(column)}%")))
           """.stripMargin
         }

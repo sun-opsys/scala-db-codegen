@@ -1,18 +1,16 @@
 package com.geirsson.codegen
-import java.util.{Date, UUID}
+import java.util.UUID
+import org.joda.time.DateTime
 
 object Tables {
   /////////////////////////////////////////////////////
   // Article
   /////////////////////////////////////////////////////
-  case class Article(
-    id: Article.Id,
+  case class Article(id: Article.Id,
     articleUniqueId: Option[Article.ArticleUniqueId],
     authorId: Option[TestUser.Id],
     isPublished: Option[Article.IsPublished],
-    title: Article.Title
-  )
-
+    title: Article.Title)
   object Article {
     def create(id: Int,
       articleUniqueId: Option[UUID],

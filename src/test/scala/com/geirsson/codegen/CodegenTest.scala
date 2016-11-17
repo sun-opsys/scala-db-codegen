@@ -34,7 +34,7 @@ class CodegenTest extends FunSuite {
     assert(obtained === expected)
   }
 
-  test("testMain") {
+  ignore("testMain") {
 
     Class.forName(options.jdbcDriver)
     val conn =
@@ -75,10 +75,10 @@ class CodegenTest extends FunSuite {
 
     val obtained = new String(baos.toByteArray, StandardCharsets.UTF_8)
 
+    println(obtained)
+
     // compareing the AST trees should suffice ...
     assert(structure(expected) == structure(obtained))
-
-
     //    println(expected.trim)
 
     // unable to get this to work, is there a layout issue, f.ex. with IntelliJ ?
@@ -86,7 +86,7 @@ class CodegenTest extends FunSuite {
 
   }
 
-  test("Test JdbcContext and Query Api") {
+  ignore("Test JdbcContext and Query Api") {
 
     val foundArticle =
       ArticleSchema.articleByPk(Article.Id(1))

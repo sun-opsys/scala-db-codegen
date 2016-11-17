@@ -86,6 +86,7 @@ lazy val `launaskil-codegen` =
         "org.postgresql" % "postgresql" % "9.4-1201-jdbc41",
         "com.github.alexarchambault" %% "case-app" % "1.0.0-RC3",
         "org.scalatest" %% "scalatest" % "3.0.0" % "test",
-        "ch.qos.logback" % "logback-classic" % "1.1.7"
+        "ch.qos.logback" % "logback-classic" % "1.1.7",
+        "com.github.nscala-time" %% "nscala-time" % "2.14.0"
       )
     )
