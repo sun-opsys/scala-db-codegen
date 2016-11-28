@@ -34,6 +34,8 @@ case class CodegenOptions(
     ) imports: String =
       s"""|import java.util.UUID
           |import java.util.Date
+          |import org.json4s._
+          |import org.json4s.native.JsonMethods._
       """.stripMargin,
     @HelpMessage(
       "package name for generated row case classes"

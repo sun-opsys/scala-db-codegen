@@ -30,7 +30,8 @@ object TypeMap {
     "bigserial" -> "Long",
     "timestamp" -> "Date",
     "timestamptz" -> "Date",
-    "uuid" -> "UUID"
+    "uuid" -> "UUID",
+    "json" -> "JValue"
   )
 }
 

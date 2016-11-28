@@ -35,6 +35,7 @@ lazy val publishSettings = Seq(
 
 val deployToBin = taskKey[Unit]("deploy-bin")
 val deployBinPath = settingKey[String]("deploy binary path")
+val circeVersion = "0.6.0"
 
 lazy val `launaskil-codegen` =
   (project in file("."))
@@ -74,7 +75,9 @@ lazy val `launaskil-codegen` =
           Files.copy(file.toPath, new File(deployBinPath.value, file.name).toPath)  
         }
         */
-      
+
+
+
       Keys.fork in Test := false,
       Keys.parallelExecution in Test := false,
       libraryDependencies ++= Seq(
@@ -87,6 +90,10 @@ lazy val `launaskil-codegen` =
         "com.github.alexarchambault" %% "case-app" % "1.0.0-RC3",
         "org.scalatest" %% "scalatest" % "3.0.0" % "test",
         "ch.qos.logback" % "logback-classic" % "1.1.7",
-        "com.github.nscala-time" %% "nscala-time" % "2.14.0"
+        "com.github.nscala-time" %% "nscala-time" % "2.14.0",
+         "org.json4s" %% "json4s-native" % "3.5.0"
+//        "io.circe" %% "circe-core" % circeVersion,
+//        "io.circe" %% "circe-generic" % circeVersion,
+//        "io.circe" %% "circe-parser" % circeVersion
       )
     )
